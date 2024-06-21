@@ -4,7 +4,7 @@ your nvidia gpu usage timeline.
 
 ### Features
 - record `nvidia-smi` output to a file
-- analyze the timeline [https://drbh.github.io/nvline/]( https://drbh.github.io/nvline/)
+- analyze the timeline [https://huggingface.co/spaces/drbh/nvline]( https://huggingface.co/spaces/drbh/nvline)
 
 ```bash
 git clone https://github.com/drbh/nvline.git
