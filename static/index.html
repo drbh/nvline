@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>nvline</title>
+    <style>
+        body {
+            background-color: #121212;
+            color: #ffffff;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        h1 {
+            margin-bottom: 10px;
+            font-size: 24px;
+        }
+
+        #chart-container {
+            width: 90%;
+            height: 80%;
+        }
+
+        #chart {
+            width: 100%;
+            height: 100%;
+        }
+
+        .axis-label {
+            fill: #ffffff;
+        }
+
+        .tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.7);
+            color: #fff;
+            padding: 5px;
+            border-radius: 3px;
+            pointer-events: none;
+            font-size: 12px;
+        }
+
+        .grid line {
+            stroke: #444;
+        }
+
+        .grid path {
+            stroke: none;
+        }
+
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .custom-file-upload {
+            border: 1px solid #ccc;
+            display: inline-block;
+            padding: 6px 12px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Import nvline JSONL File and Display Memory Usage</h1>
+
+
+    <label for="fileInput" class="custom-file-upload">
+        Add nvline JSONL File
+    </label>
+    <input type="file" id="fileInput" accept=".jsonl">
+
+    <div id="chart-container">
+        <svg id="chart"></svg>
+    </div>
+    <div id="tooltip" class="tooltip" style="display: none;"></div>
+
+    <script>
+        document.getElementById('fileInput').addEventListener('change', handleFile, false);
+
+        function handleFile(event) {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+            reader.onload = function (event) {
+                const lines = event.target.result.split('\n').filter(line => line.trim() !== '');
+                const data = lines.map(line => JSON.parse(line));
+                drawChart(data);
+            };
+            reader.readAsText(file);
+        }
+
+        function drawChart(data) {
+            const svg = document.getElementById('chart');
+            svg.innerHTML = '';
+            const width = svg.clientWidth;
+            const height = svg.clientHeight;
+            const padding = 30;
+            const xScale = width / (data.length - 1);
+            const yMax = Math.max(...data.map(d => d.memory_total));
+            const yScale = (height - padding * 2) / yMax;
+
+            const line = (points) => points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0]},${p[1]}`).join(' ');
+
+            const memoryUsedPoints = data.map((d, i) => [i * xScale, height - padding - d.memory_used * yScale]);
+            const memoryFreePoints = data.map((d, i) => [i * xScale, height - padding - d.memory_free * yScale]);
+            const memoryTotalPoints = data.map((d, i) => [i * xScale, height - padding - d.memory_total * yScale]);
+
+            const gridX = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            const gridY = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+
+            for (let i = 0; i < data.length; i++) {
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', i * xScale);
+                line.setAttribute('y1', height - padding);
+                line.setAttribute('x2', i * xScale);
+                line.setAttribute('y2', padding);
+                line.setAttribute('class', 'grid');
+                line.setAttribute('stroke', '#444');
+                gridX.appendChild(line);
+            }
+
+            for (let i = 0; i <= yMax; i += yMax / 10) {
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', 0);
+                line.setAttribute('y1', height - padding - i * yScale);
+                line.setAttribute('x2', width);
+                line.setAttribute('y2', height - padding - i * yScale);
+                line.setAttribute('class', 'grid');
+                line.setAttribute('stroke', '#444');
+                gridY.appendChild(line);
+            }
+
+            svg.appendChild(gridX);
+            svg.appendChild(gridY);
+
+            const pathUsed = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            pathUsed.setAttribute('d', line(memoryUsedPoints));
+            pathUsed.setAttribute('stroke', 'red');
+            pathUsed.setAttribute('fill', 'none');
+            svg.appendChild(pathUsed);
+
+            const pathFree = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            pathFree.setAttribute('d', line(memoryFreePoints));
+            pathFree.setAttribute('stroke', 'green');
+            pathFree.setAttribute('fill', 'none');
+            svg.appendChild(pathFree);
+
+            const pathTotal = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            pathTotal.setAttribute('d', line(memoryTotalPoints));
+            pathTotal.setAttribute('stroke', 'blue');
+            pathTotal.setAttribute('fill', 'none');
+            svg.appendChild(pathTotal);
+
+            memoryUsedPoints.forEach((point, i) => {
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', point[0]);
+                circle.setAttribute('cy', point[1]);
+                circle.setAttribute('r', 3);
+                circle.setAttribute('fill', 'red');
+                circle.setAttribute('class', 'dot dot-used');
+                circle.setAttribute('data-index', i);
+                svg.appendChild(circle);
+            });
+
+            memoryFreePoints.forEach((point, i) => {
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', point[0]);
+                circle.setAttribute('cy', point[1]);
+                circle.setAttribute('r', 3);
+                circle.setAttribute('fill', 'green');
+                circle.setAttribute('class', 'dot dot-free');
+                circle.setAttribute('data-index', i);
+                svg.appendChild(circle);
+            });
+
+            memoryTotalPoints.forEach((point, i) => {
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', point[0]);
+                circle.setAttribute('cy', point[1]);
+                circle.setAttribute('r', 3);
+                circle.setAttribute('fill', 'blue');
+                circle.setAttribute('class', 'dot dot-total');
+                circle.setAttribute('data-index', i);
+                svg.appendChild(circle);
+            });
+
+            const xAxisLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            xAxisLabel.setAttribute('x', width / 2);
+            xAxisLabel.setAttribute('y', height - 10);
+            xAxisLabel.setAttribute('class', 'axis-label');
+            xAxisLabel.setAttribute('text-anchor', 'middle');
+            xAxisLabel.textContent = 'Data Points';
+            svg.appendChild(xAxisLabel);
+
+            const yAxisLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            yAxisLabel.setAttribute('x', -height / 2);
+            yAxisLabel.setAttribute('y', 20);
+            yAxisLabel.setAttribute('class', 'axis-label');
+            yAxisLabel.setAttribute('text-anchor', 'middle');
+            yAxisLabel.setAttribute('transform', 'rotate(-90)');
+            yAxisLabel.textContent = 'Memory Usage';
+            svg.appendChild(yAxisLabel);
+
+            const tooltip = document.getElementById('tooltip');
+            svg.addEventListener('mousemove', (event) => {
+                const rect = svg.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const index = Math.round(x / xScale);
+
+                document.querySelectorAll('.dot').forEach(dot => dot.style.display = 'none');
+
+                if (index >= 0 && index < data.length) {
+                    const memoryUsed = data[index].memory_used;
+                    const memoryFree = data[index].memory_free;
+                    const memoryTotal = data[index].memory_total;
+                    const timestamp = new Date(1000 * data[index].timestamp).toISOString();
+
+                    tooltip.style.display = 'block';
+                    tooltip.style.left = event.pageX + 10 + 'px';
+                    tooltip.style.top = event.pageY - 10 + 'px';
+                    tooltip.innerHTML = `Total: ${memoryTotal} Used: ${memoryUsed}<br>Free: ${memoryFree}<br> Timestamp: ${timestamp}`;
+
+                    document.querySelector(`.dot-used[data-index='${index}']`).style.display = 'block';
+                    document.querySelector(`.dot-free[data-index='${index}']`).style.display = 'block';
+                    document.querySelector(`.dot-total[data-index='${index}']`).style.display = 'block';
+                } else {
+                    tooltip.style.display = 'none';
+                }
+            });
+
+            svg.addEventListener('mouseout', () => {
+                tooltip.style.display = 'none';
+                document.querySelectorAll('.dot').forEach(dot => dot.style.display = 'none');
+            });
+        }
+    </script>
+</body>
+
+</html>

@@ -1,6 +1,7 @@
 use serde::Serialize;
 use serde_json::json;
 use std::collections::VecDeque;
+use std::env;
 use std::fs::OpenOptions;
 use std::io::Seek;
 use std::io::SeekFrom;
@@ -12,9 +13,9 @@ use std::time::Duration;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
-const MAX_LINES: usize = 10;
-const INTERVAL: u64 = 1_000;
-const FILE_PATH: &str = "gpu_log.jsonl";
+const DEFAULT_MAX_LINES: usize = 10;
+const DEFAULT_INTERVAL: u64 = 1_000;
+const DEFAULT_FILE_PATH: &str = "gpu_log.jsonl";
 
 #[derive(Debug, Serialize, Clone)]
 struct GpuInfo {
@@ -49,9 +50,18 @@ fn parse_gpu_info(output: &str) -> Option<Vec<GpuInfo>> {
     Some(all_gpu_info)
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let max_lines: usize = env::var("MAX_LINES")
+        .unwrap_or_else(|_| DEFAULT_MAX_LINES.to_string())
+        .parse()
+        .expect("Invalid MAX_LINES value");
+    let interval: u64 = env::var("INTERVAL")
+        .unwrap_or_else(|_| DEFAULT_INTERVAL.to_string())
+        .parse()
+        .expect("Invalid INTERVAL value");
+    let file_path: String = env::var("FILE_PATH").unwrap_or_else(|_| DEFAULT_FILE_PATH.to_string());
+
     let mut log: VecDeque<GpuInfo> = VecDeque::new();
-    let file_path = FILE_PATH;
 
     let mut file = OpenOptions::new()
         .create(true)
@@ -75,7 +85,9 @@ fn main() {
             .arg("--query-gpu=name,driver_version,memory.total,memory.used,memory.free,temperature.gpu")
             .arg("--format=csv,noheader,nounits")
             .output()
-            .expect("Failed to execute nvidia-smi");
+            .map_err(|_e| {
+                std::io::Error::new(std::io::ErrorKind::Other, std::format!("Failed to execute nvidia-smi command. Please ensure that nvidia-smi is installed and accessible in your PATH."))
+            })?;
 
         if output.status.success() {
             let output_str = str::from_utf8(&output.stdout).expect("Failed to parse output");
@@ -83,7 +95,7 @@ fn main() {
                 for gpu_info in &gpu_infos {
                     log.push_back(gpu_info.clone());
 
-                    if log.len() > MAX_LINES {
+                    if log.len() > max_lines {
                         log.pop_front();
                     }
 
@@ -104,15 +116,15 @@ fn main() {
                     let file_length = file.metadata().expect("Failed to get file metadata").len();
                     let entry_length = log_entry_bytes.len() as u64;
 
-                    let seek_pos = if file_length >= MAX_LINES as u64 * entry_length {
+                    let seek_pos = if file_length >= max_lines as u64 * entry_length {
                         curr as u64 * entry_length
                     } else {
                         file_length
                     };
                     file.seek(SeekFrom::Start(seek_pos))
                         .expect("Failed to seek");
-                    if file_length >= MAX_LINES as u64 * entry_length {
-                        curr = (curr + 1) % MAX_LINES;
+                    if file_length >= max_lines as u64 * entry_length {
+                        curr = (curr + 1) % max_lines;
                     }
 
                     file.write_all(log_entry_bytes)
@@ -134,6 +146,6 @@ fn main() {
             eprintln!("nvidia-smi command failed");
         }
 
-        thread::sleep(Duration::from_millis(INTERVAL));
+        thread::sleep(Duration::from_millis(interval));
     }
 }
