@@ -6,6 +6,7 @@ description = "A simple command line tool to record your gpu usage"
 repository = "https://github.com/drbh/nvline"
 documentation = "README.md"
 authors = ["David Holtz <github.com/drbh>"]
+license = "MIT"
 
 [dependencies]
 clap = { version = "4.5.7", features = ["derive"] }
